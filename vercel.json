@@ -1,0 +1,17 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "api/api.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "public/index.html",
+        "use": "@vercel/static"
+      }
+    ],
+    "env": {
+      "MY_ENV_VARIABLE": "@my-env-variable"
+    }
+  }
+  
